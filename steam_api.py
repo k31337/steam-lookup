@@ -3,6 +3,8 @@ import re
 import requests
 
 BASE_URL = "https://api.steampowered.com"
+INVENTORY_URL = "https://steamcommunity.com/inventory"
+CS2_APP_ID = 730
 
 
 class SteamAPIError(Exception):
@@ -86,3 +88,31 @@ class SteamClient:
             "IPlayerService", "GetBadges", "v1", {"steamid": steam_id}
         )
         return data.get("response", {}).get("badges", [])
+
+    def get_inventory_item_counts(self, steam_id: str, app_id: int = CS2_APP_ID) -> dict[str, int]:
+        """Returns a count of items per item name from a user's public inventory.
+
+        Uses the public community inventory endpoint (no API key required).
+        Raises SteamAPIError if the inventory is private or unavailable.
+        """
+        url = f"{INVENTORY_URL}/{steam_id}/{app_id}/2"
+        resp = requests.get(url, params={"l": "english", "count": 5000}, timeout=10)
+        if resp.status_code == 403:
+            raise SteamAPIError("Inventory is private.")
+        if resp.status_code != 200:
+            raise SteamAPIError(f"HTTP error {resp.status_code} fetching inventory.")
+
+        data = resp.json()
+        if not data or not data.get("assets"):
+            return {}
+
+        names_by_classid = {
+            desc["classid"]: desc.get("market_hash_name") or desc.get("name", "Unknown")
+            for desc in data.get("descriptions", [])
+        }
+
+        counts: dict[str, int] = {}
+        for asset in data["assets"]:
+            name = names_by_classid.get(asset["classid"], "Unknown")
+            counts[name] = counts.get(name, 0) + int(asset.get("amount", 1))
+        return counts

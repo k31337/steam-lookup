@@ -61,6 +61,18 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         ban_lines.append(f"[bold]Days since last ban:[/bold] {bans['DaysSinceLastBan']}")
     console.print(Panel("\n".join(ban_lines), title="Bans", border_style=ban_color))
 
+    try:
+        item_counts = client.get_inventory_item_counts(steam_id)
+    except SteamAPIError as e:
+        console.print(Panel(str(e), title="CS2 Inventory", border_style="grey50"))
+    else:
+        total_items = sum(item_counts.values())
+        inv_lines = [f"[bold]Total items:[/bold] {total_items}", f"[bold]Unique items:[/bold] {len(item_counts)}"]
+        top_items = sorted(item_counts.items(), key=lambda kv: kv[1], reverse=True)[:5]
+        for name, count in top_items:
+            inv_lines.append(f"  - {name} x{count}")
+        console.print(Panel("\n".join(inv_lines), title="CS2 Inventory", border_style="blue"))
+
     friends = client.get_friend_list(steam_id)
     if not friends:
         console.print(Panel(
