@@ -96,9 +96,14 @@ class SteamClient:
         Raises SteamAPIError if the inventory is private or unavailable.
         """
         url = f"{INVENTORY_URL}/{steam_id}/{app_id}/2"
-        resp = requests.get(url, params={"l": "english", "count": 5000}, timeout=10)
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; steam-lookup/1.0)"}
+        resp = requests.get(
+            url, params={"l": "english", "count": 5000}, headers=headers, timeout=10
+        )
         if resp.status_code == 403:
             raise SteamAPIError("Inventory is private.")
+        if resp.status_code == 400:
+            raise SteamAPIError("No inventory data found (empty, private, or game never launched).")
         if resp.status_code != 200:
             raise SteamAPIError(f"HTTP error {resp.status_code} fetching inventory.")
 
