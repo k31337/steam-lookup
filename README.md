@@ -1,6 +1,6 @@
 # steam-lookup
 
-Python script that queries the Steam Web API to show a user's profile, friend list, and bans (VAC/game/community).
+Python script that queries the Steam Web API to show a user's profile, Steam level and badges, bans (VAC/game/community), and their friend list with each friend's ban status.
 
 ## Setup
 
@@ -20,3 +20,10 @@ Example:
 ```
 python main.py gabelogannewell
 ```
+
+## What it shows
+
+- **Profile**: name, SteamID64, profile URL, status, account creation date, country.
+- **Level & Badges**: Steam level and top 5 badges by level.
+- **Bans**: VAC bans, game bans, community ban, economy ban.
+- **Friends**: total friend count and, for each friend, their name and ban status (VAC/game/community or "clean"). Requires the target's friend list to be public.
