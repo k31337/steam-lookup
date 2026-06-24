@@ -74,3 +74,15 @@ class SteamClient:
             "ISteamUser", "GetPlayerBans", "v1", {"steamids": ",".join(steam_ids)}
         )
         return data.get("players", [])
+
+    def get_steam_level(self, steam_id: str) -> int:
+        data = self._get(
+            "IPlayerService", "GetSteamLevel", "v1", {"steamid": steam_id}
+        )
+        return data.get("response", {}).get("player_level", 0)
+
+    def get_badges(self, steam_id: str) -> list[dict]:
+        data = self._get(
+            "IPlayerService", "GetBadges", "v1", {"steamid": steam_id}
+        )
+        return data.get("response", {}).get("badges", [])

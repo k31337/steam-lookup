@@ -29,6 +29,17 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
     if "loccountrycode" in profile:
         print(f"Country: {profile['loccountrycode']}")
 
+    print("\n== Level & Badges ==")
+    level = client.get_steam_level(steam_id)
+    print(f"Steam level: {level}")
+    badges = client.get_badges(steam_id)
+    print(f"Total badges: {len(badges)}")
+    for badge in sorted(badges, key=lambda b: b.get("level", 0), reverse=True)[:5]:
+        badge_id = badge.get("badgeid", "?")
+        badge_level = badge.get("level", 0)
+        xp = badge.get("xp", 0)
+        print(f"  - Badge {badge_id} (level {badge_level}, {xp} XP)")
+
     print("\n== Bans ==")
     bans = client.get_player_bans(steam_id)
     print(f"VAC bans: {bans.get('NumberOfVACBans', 0)}")
