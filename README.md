@@ -1,4 +1,4 @@
-# steam-stats
+# steam-lookup
 
 Python script that queries the Steam Web API to show a user's profile, friend list, and bans (VAC/game/community).
 
