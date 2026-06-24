@@ -68,3 +68,9 @@ class SteamClient:
         if not players:
             raise SteamAPIError(f"No ban data found for {steam_id}.")
         return players[0]
+
+    def get_players_bans(self, steam_ids: list[str]) -> list[dict]:
+        data = self._get(
+            "ISteamUser", "GetPlayerBans", "v1", {"steamids": ",".join(steam_ids)}
+        )
+        return data.get("players", [])

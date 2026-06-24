@@ -45,10 +45,27 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         return
     print(f"Total friends: {len(friends)}")
     friend_ids = [f["steamid"] for f in friends]
+    names_by_id = {}
+    bans_by_id = {}
     for batch_start in range(0, len(friend_ids), 100):
         batch = friend_ids[batch_start:batch_start + 100]
         for p in client.get_player_summaries(batch):
-            print(f"  - {p.get('personaname')} ({p.get('steamid')})")
+            names_by_id[p["steamid"]] = p.get("personaname", "Unknown")
+        for b in client.get_players_bans(batch):
+            bans_by_id[b["SteamId"]] = b
+
+    for fid in friend_ids:
+        name = names_by_id.get(fid, "Unknown")
+        ban = bans_by_id.get(fid, {})
+        flags = []
+        if ban.get("NumberOfVACBans", 0) > 0:
+            flags.append(f"VAC x{ban['NumberOfVACBans']}")
+        if ban.get("NumberOfGameBans", 0) > 0:
+            flags.append(f"Game ban x{ban['NumberOfGameBans']}")
+        if ban.get("CommunityBanned"):
+            flags.append("Community ban")
+        status = ", ".join(flags) if flags else "clean"
+        print(f"  - {name} ({fid}): {status}")
 
 
 def main() -> None:
