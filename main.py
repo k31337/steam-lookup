@@ -4,8 +4,13 @@ import sys
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 from steam_api import SteamClient, SteamAPIError
+
+console = Console()
 
 PERSONA_STATES = {
     0: "Offline", 1: "Online", 2: "Busy", 3: "Away",
@@ -19,42 +24,51 @@ def format_timestamp(ts: int) -> str:
 
 def print_profile(client: SteamClient, steam_id: str) -> None:
     profile = client.get_player_summary(steam_id)
-    print("\n== Profile ==")
-    print(f"Name: {profile.get('personaname')}")
-    print(f"SteamID64: {profile.get('steamid')}")
-    print(f"Profile URL: {profile.get('profileurl')}")
-    print(f"Status: {PERSONA_STATES.get(profile.get('personastate'), 'Unknown')}")
+    status = PERSONA_STATES.get(profile.get("personastate"), "Unknown")
+    status_color = "green" if status == "Online" else "white"
+
+    info_lines = [
+        f"[bold]Name:[/bold] {profile.get('personaname')}",
+        f"[bold]SteamID64:[/bold] {profile.get('steamid')}",
+        f"[bold]Profile URL:[/bold] {profile.get('profileurl')}",
+        f"[bold]Status:[/bold] [{status_color}]{status}[/{status_color}]",
+    ]
     if "timecreated" in profile:
-        print(f"Account created: {format_timestamp(profile['timecreated'])}")
+        info_lines.append(f"[bold]Account created:[/bold] {format_timestamp(profile['timecreated'])}")
     if "loccountrycode" in profile:
-        print(f"Country: {profile['loccountrycode']}")
+        info_lines.append(f"[bold]Country:[/bold] {profile['loccountrycode']}")
+    console.print(Panel("\n".join(info_lines), title="Profile", border_style="cyan"))
 
-    print("\n== Level & Badges ==")
     level = client.get_steam_level(steam_id)
-    print(f"Steam level: {level}")
     badges = client.get_badges(steam_id)
-    print(f"Total badges: {len(badges)}")
+    badge_lines = [f"[bold]Steam level:[/bold] {level}", f"[bold]Total badges:[/bold] {len(badges)}"]
     for badge in sorted(badges, key=lambda b: b.get("level", 0), reverse=True)[:5]:
-        badge_id = badge.get("badgeid", "?")
-        badge_level = badge.get("level", 0)
-        xp = badge.get("xp", 0)
-        print(f"  - Badge {badge_id} (level {badge_level}, {xp} XP)")
+        badge_lines.append(
+            f"  - Badge {badge.get('badgeid', '?')} (level {badge.get('level', 0)}, {badge.get('xp', 0)} XP)"
+        )
+    console.print(Panel("\n".join(badge_lines), title="Level & Badges", border_style="yellow"))
 
-    print("\n== Bans ==")
     bans = client.get_player_bans(steam_id)
-    print(f"VAC bans: {bans.get('NumberOfVACBans', 0)}")
-    print(f"Game bans: {bans.get('NumberOfGameBans', 0)}")
-    print(f"Community ban: {'Yes' if bans.get('CommunityBanned') else 'No'}")
-    print(f"Economy ban: {bans.get('EconomyBan', 'none')}")
+    has_bans = bans.get("NumberOfVACBans", 0) > 0 or bans.get("NumberOfGameBans", 0) > 0 or bans.get("CommunityBanned")
+    ban_color = "red" if has_bans else "green"
+    ban_lines = [
+        f"[bold]VAC bans:[/bold] {bans.get('NumberOfVACBans', 0)}",
+        f"[bold]Game bans:[/bold] {bans.get('NumberOfGameBans', 0)}",
+        f"[bold]Community ban:[/bold] {'Yes' if bans.get('CommunityBanned') else 'No'}",
+        f"[bold]Economy ban:[/bold] {bans.get('EconomyBan', 'none')}",
+    ]
     if bans.get("DaysSinceLastBan", 0) > 0:
-        print(f"Days since last ban: {bans['DaysSinceLastBan']}")
+        ban_lines.append(f"[bold]Days since last ban:[/bold] {bans['DaysSinceLastBan']}")
+    console.print(Panel("\n".join(ban_lines), title="Bans", border_style=ban_color))
 
-    print("\n== Friends ==")
     friends = client.get_friend_list(steam_id)
     if not friends:
-        print("Could not retrieve friend list (private profile or no friends).")
+        console.print(Panel(
+            "Could not retrieve friend list (private profile or no friends).",
+            title="Friends", border_style="grey50",
+        ))
         return
-    print(f"Total friends: {len(friends)}")
+
     friend_ids = [f["steamid"] for f in friends]
     names_by_id = {}
     bans_by_id = {}
@@ -64,6 +78,11 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
             names_by_id[p["steamid"]] = p.get("personaname", "Unknown")
         for b in client.get_players_bans(batch):
             bans_by_id[b["SteamId"]] = b
+
+    table = Table(title=f"Friends ({len(friends)})", border_style="magenta")
+    table.add_column("Name", style="bold")
+    table.add_column("SteamID64")
+    table.add_column("Ban status")
 
     for fid in friend_ids:
         name = names_by_id.get(fid, "Unknown")
@@ -75,14 +94,17 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
             flags.append(f"Game ban x{ban['NumberOfGameBans']}")
         if ban.get("CommunityBanned"):
             flags.append("Community ban")
-        status = ", ".join(flags) if flags else "clean"
-        print(f"  - {name} ({fid}): {status}")
+        status_text = ", ".join(flags) if flags else "clean"
+        status_style = "red" if flags else "green"
+        table.add_row(name, fid, f"[{status_style}]{status_text}[/{status_style}]")
+
+    console.print(table)
 
 
 def main() -> None:
     load_dotenv()
     if len(sys.argv) < 2:
-        print("Usage: python main.py <steamid64 | vanity_url | profile_url>")
+        console.print("Usage: python main.py <steamid64 | vanity_url | profile_url>")
         sys.exit(1)
 
     api_key = os.getenv("STEAM_API_KEY")
@@ -93,7 +115,7 @@ def main() -> None:
         steam_id = client.resolve_steam_id(identifier)
         print_profile(client, steam_id)
     except SteamAPIError as e:
-        print(f"Error: {e}")
+        console.print(f"[bold red]Error:[/bold red] {e}")
         sys.exit(1)
 
 
