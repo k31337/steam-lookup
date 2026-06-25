@@ -104,10 +104,10 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         for b in client.get_players_bans(batch):
             bans_by_id[b["SteamId"]] = b
 
-    table = Table(title=f"Friends ({len(friends)})", border_style="magenta")
-    table.add_column("Name", style="bold")
-    table.add_column("SteamID64")
-    table.add_column("Ban status")
+    table = Table(title=f"Friends ({len(friends)})", border_style="magenta", expand=False)
+    table.add_column("Name", style="bold", max_width=30, overflow="ellipsis", no_wrap=True)
+    table.add_column("SteamID64", no_wrap=True)
+    table.add_column("Ban status", no_wrap=True)
 
     for fid in friend_ids:
         name = names_by_id.get(fid, "Unknown")
