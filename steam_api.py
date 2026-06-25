@@ -1,10 +1,14 @@
 """Simple client for the Steam Web API."""
 import re
+import time
+
 import requests
 
 BASE_URL = "https://api.steampowered.com"
 INVENTORY_URL = "https://steamcommunity.com/inventory"
+MARKET_PRICE_URL = "https://steamcommunity.com/market/priceoverview/"
 CS2_APP_ID = 730
+USD_CURRENCY = 1
 
 
 class SteamAPIError(Exception):
@@ -92,32 +96,95 @@ class SteamClient:
     def get_inventory_item_counts(self, steam_id: str, app_id: int = CS2_APP_ID) -> dict[str, int]:
         """Returns a count of items per item name from a user's public inventory.
 
-        Uses the public community inventory endpoint (no API key required).
-        Raises SteamAPIError if the inventory is private or unavailable.
+        Uses the public community inventory endpoint (no API key required), paginating
+        with start_assetid as needed. Raises SteamAPIError if the inventory is private
+        or unavailable.
+
+        Note: requesting count=5000 makes Steam return HTTP 400, so pages are capped at
+        2000 items and followed via the more_items/last_assetid fields.
         """
         url = f"{INVENTORY_URL}/{steam_id}/{app_id}/2"
         headers = {"User-Agent": "Mozilla/5.0 (compatible; steam-lookup/1.0)"}
-        resp = requests.get(
-            url, params={"l": "english", "count": 5000}, headers=headers, timeout=10
-        )
-        if resp.status_code == 403:
-            raise SteamAPIError("Inventory is private.")
-        if resp.status_code == 400:
-            raise SteamAPIError("No inventory data found (empty, private, or game never launched).")
-        if resp.status_code != 200:
-            raise SteamAPIError(f"HTTP error {resp.status_code} fetching inventory.")
-
-        data = resp.json()
-        if not data or not data.get("assets"):
-            return {}
-
-        names_by_classid = {
-            desc["classid"]: desc.get("market_hash_name") or desc.get("name", "Unknown")
-            for desc in data.get("descriptions", [])
-        }
-
         counts: dict[str, int] = {}
-        for asset in data["assets"]:
-            name = names_by_classid.get(asset["classid"], "Unknown")
-            counts[name] = counts.get(name, 0) + int(asset.get("amount", 1))
+        start_assetid = None
+
+        while True:
+            params = {"l": "english", "count": 2000}
+            if start_assetid:
+                params["start_assetid"] = start_assetid
+
+            resp = requests.get(url, params=params, headers=headers, timeout=10)
+            if resp.status_code == 403:
+                raise SteamAPIError("Inventory is private.")
+            if resp.status_code == 400:
+                raise SteamAPIError("No inventory data found (empty, private, or game never launched).")
+            if resp.status_code == 429:
+                raise SteamAPIError("Rate limited by Steam while fetching inventory. Try again shortly.")
+            if resp.status_code != 200:
+                raise SteamAPIError(f"HTTP error {resp.status_code} fetching inventory.")
+
+            data = resp.json()
+            if not data or not data.get("assets"):
+                break
+
+            names_by_classid = {
+                desc["classid"]: desc.get("market_hash_name") or desc.get("name", "Unknown")
+                for desc in data.get("descriptions", [])
+            }
+            for asset in data["assets"]:
+                name = names_by_classid.get(asset["classid"], "Unknown")
+                counts[name] = counts.get(name, 0) + int(asset.get("amount", 1))
+
+            if not data.get("more_items"):
+                break
+            start_assetid = data.get("last_assetid")
+            time.sleep(1)
+
         return counts
+
+    def get_market_price(self, market_hash_name: str, app_id: int = CS2_APP_ID) -> float | None:
+        """Returns the lowest market price (in USD) for an item, or None if unavailable.
+
+        Uses the public, unauthenticated priceoverview endpoint. This endpoint is
+        aggressively rate-limited by Steam, so callers should space out requests.
+        """
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; steam-lookup/1.0)"}
+        resp = requests.get(
+            MARKET_PRICE_URL,
+            params={"appid": app_id, "currency": USD_CURRENCY, "market_hash_name": market_hash_name},
+            headers=headers,
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        if not data.get("success"):
+            return None
+        price_str = data.get("lowest_price") or data.get("median_price")
+        if not price_str:
+            return None
+        match = re.search(r"[\d.,]+", price_str)
+        if not match:
+            return None
+        return float(match.group().replace(",", ""))
+
+    def get_inventory_value(
+        self, item_counts: dict[str, int], app_id: int = CS2_APP_ID, max_unique_items: int = 30,
+        request_delay: float = 1.0,
+    ) -> tuple[float, int]:
+        """Estimates total inventory value in USD by pricing the most common items.
+
+        Returns (total_value, priced_unique_item_count). To respect Steam's rate
+        limits, only the top `max_unique_items` (by quantity) are priced.
+        """
+        top_items = sorted(item_counts.items(), key=lambda kv: kv[1], reverse=True)[:max_unique_items]
+        total_value = 0.0
+        priced_count = 0
+        for i, (name, count) in enumerate(top_items):
+            price = self.get_market_price(name, app_id)
+            if price is not None:
+                total_value += price * count
+                priced_count += 1
+            if i < len(top_items) - 1:
+                time.sleep(request_delay)
+        return total_value, priced_count

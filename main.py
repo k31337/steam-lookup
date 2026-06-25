@@ -10,6 +10,10 @@ from rich.table import Table
 
 from steam_api import SteamClient, SteamAPIError
 
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 console = Console()
 
 PERSONA_STATES = {
@@ -71,6 +75,15 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         top_items = sorted(item_counts.items(), key=lambda kv: kv[1], reverse=True)[:5]
         for name, count in top_items:
             inv_lines.append(f"  - {name} x{count}")
+
+        if item_counts:
+            with console.status("Fetching market prices..."):
+                total_value, priced_count = client.get_inventory_value(item_counts)
+            inv_lines.append(f"\n[bold]Estimated value:[/bold] ~${total_value:,.2f} USD")
+            inv_lines.append(
+                f"[dim](based on lowest market price for the top {priced_count} most common unique items)[/dim]"
+            )
+
         console.print(Panel("\n".join(inv_lines), title="CS2 Inventory", border_style="blue"))
 
     friends = client.get_friend_list(steam_id)
