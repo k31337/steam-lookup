@@ -78,4 +78,4 @@ The friend list and friends' ban statuses require the target profile's friend li
 
 ## License
 
-Distributed under the terms of the [GNU GPLv3](LICENSE).
+Distributed under the terms of the [MIT License](LICENSE).
