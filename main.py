@@ -46,10 +46,10 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
     level = client.get_steam_level(steam_id)
     badges = client.get_badges(steam_id)
     badge_lines = [f"[bold]Steam level:[/bold] {level}", f"[bold]Total badges:[/bold] {len(badges)}"]
-    for badge in sorted(badges, key=lambda b: b.get("level", 0), reverse=True)[:5]:
-        badge_lines.append(
-            f"  - Badge {badge.get('badgeid', '?')} (level {badge.get('level', 0)}, {badge.get('xp', 0)} XP)"
-        )
+    for badge in sorted(badges, key=lambda b: b.get("xp", 0), reverse=True)[:5]:
+        appid = badge.get("appid")
+        label = f"Game badge (AppID {appid})" if appid else f"Special badge #{badge.get('badgeid', '?')}"
+        badge_lines.append(f"  - {label}: level {badge.get('level', 0)}, {badge.get('xp', 0)} XP")
     console.print(Panel("\n".join(badge_lines), title="Level & Badges", border_style="yellow"))
 
     bans = client.get_player_bans(steam_id)
