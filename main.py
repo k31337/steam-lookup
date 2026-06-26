@@ -26,6 +26,55 @@ def format_timestamp(ts: int) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
 
 
+def compute_trust_score(
+    profile: dict, bans: dict, account_age_days: float | None,
+    games_private: bool, inventory_private: bool, friends_private: bool,
+) -> tuple[int, list[str]]:
+    """Returns a rough, non-official 0-100 trust score and the reasons behind it.
+
+    This is a simple heuristic for quick orientation only — it is not provided
+    or endorsed by Valve and should never be the sole basis for trust decisions.
+    """
+    score = 100
+    reasons = []
+
+    if bans.get("NumberOfVACBans", 0) > 0:
+        score -= 40
+        reasons.append("Has VAC ban(s)")
+    if bans.get("NumberOfGameBans", 0) > 0:
+        score -= 25
+        reasons.append("Has game ban(s)")
+    if bans.get("CommunityBanned"):
+        score -= 15
+        reasons.append("Community banned")
+    if bans.get("EconomyBan", "none") != "none":
+        score -= 10
+        reasons.append("Economy ban active")
+
+    if account_age_days is None:
+        score -= 10
+        reasons.append("Account creation date unavailable")
+    elif account_age_days < 30:
+        score -= 25
+        reasons.append("Account younger than 30 days")
+    elif account_age_days < 365:
+        score -= 10
+        reasons.append("Account younger than 1 year")
+
+    if profile.get("communityvisibilitystate") != 3:
+        score -= 20
+        reasons.append("Profile is private")
+
+    if games_private and inventory_private and friends_private:
+        score -= 15
+        reasons.append("Games, inventory, and friends are all hidden")
+
+    score = max(0, min(100, score))
+    if not reasons:
+        reasons.append("No red flags detected")
+    return score, reasons
+
+
 def print_profile(client: SteamClient, steam_id: str) -> None:
     profile = client.get_player_summary(steam_id)
     status = PERSONA_STATES.get(profile.get("personastate"), "Unknown")
@@ -52,9 +101,11 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         badge_lines.append(f"  - {label}: level {badge.get('level', 0)}, {badge.get('xp', 0)} XP")
     console.print(Panel("\n".join(badge_lines), title="Level & Badges", border_style="yellow"))
 
+    games_private = False
     try:
         games = client.get_owned_games(steam_id)
     except SteamAPIError as e:
+        games_private = True
         console.print(Panel(str(e), title="Games", border_style="grey50"))
     else:
         total_hours = sum(g.get("playtime_forever", 0) for g in games) / 60
@@ -78,9 +129,11 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         ban_lines.append(f"[bold]Days since last ban:[/bold] {bans['DaysSinceLastBan']}")
     console.print(Panel("\n".join(ban_lines), title="Bans", border_style=ban_color))
 
+    inventory_private = False
     try:
         item_counts = client.get_inventory_item_counts(steam_id)
     except SteamAPIError as e:
+        inventory_private = True
         console.print(Panel(str(e), title="CS2 Inventory", border_style="grey50"))
     else:
         total_items = sum(item_counts.values())
@@ -99,44 +152,64 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
 
         console.print(Panel("\n".join(inv_lines), title="CS2 Inventory", border_style="blue"))
 
+    friends_private = False
     friends = client.get_friend_list(steam_id)
     if not friends:
+        friends_private = True
         console.print(Panel(
             "Could not retrieve friend list (private profile or no friends).",
             title="Friends", border_style="grey50",
         ))
-        return
+    else:
+        friend_ids = [f["steamid"] for f in friends]
+        names_by_id = {}
+        bans_by_id = {}
+        for batch_start in range(0, len(friend_ids), 100):
+            batch = friend_ids[batch_start:batch_start + 100]
+            for p in client.get_player_summaries(batch):
+                names_by_id[p["steamid"]] = p.get("personaname", "Unknown")
+            for b in client.get_players_bans(batch):
+                bans_by_id[b["SteamId"]] = b
 
-    friend_ids = [f["steamid"] for f in friends]
-    names_by_id = {}
-    bans_by_id = {}
-    for batch_start in range(0, len(friend_ids), 100):
-        batch = friend_ids[batch_start:batch_start + 100]
-        for p in client.get_player_summaries(batch):
-            names_by_id[p["steamid"]] = p.get("personaname", "Unknown")
-        for b in client.get_players_bans(batch):
-            bans_by_id[b["SteamId"]] = b
+        table = Table(title=f"Friends ({len(friends)})", border_style="magenta", expand=False)
+        table.add_column("Name", style="bold", max_width=30, overflow="ellipsis", no_wrap=True)
+        table.add_column("SteamID64", no_wrap=True)
+        table.add_column("Ban status", no_wrap=True)
 
-    table = Table(title=f"Friends ({len(friends)})", border_style="magenta", expand=False)
-    table.add_column("Name", style="bold", max_width=30, overflow="ellipsis", no_wrap=True)
-    table.add_column("SteamID64", no_wrap=True)
-    table.add_column("Ban status", no_wrap=True)
+        for fid in friend_ids:
+            name = names_by_id.get(fid, "Unknown")
+            ban = bans_by_id.get(fid, {})
+            flags = []
+            if ban.get("NumberOfVACBans", 0) > 0:
+                flags.append(f"VAC x{ban['NumberOfVACBans']}")
+            if ban.get("NumberOfGameBans", 0) > 0:
+                flags.append(f"Game ban x{ban['NumberOfGameBans']}")
+            if ban.get("CommunityBanned"):
+                flags.append("Community ban")
+            status_text = ", ".join(flags) if flags else "clean"
+            status_style = "red" if flags else "green"
+            table.add_row(name, fid, f"[{status_style}]{status_text}[/{status_style}]")
 
-    for fid in friend_ids:
-        name = names_by_id.get(fid, "Unknown")
-        ban = bans_by_id.get(fid, {})
-        flags = []
-        if ban.get("NumberOfVACBans", 0) > 0:
-            flags.append(f"VAC x{ban['NumberOfVACBans']}")
-        if ban.get("NumberOfGameBans", 0) > 0:
-            flags.append(f"Game ban x{ban['NumberOfGameBans']}")
-        if ban.get("CommunityBanned"):
-            flags.append("Community ban")
-        status_text = ", ".join(flags) if flags else "clean"
-        status_style = "red" if flags else "green"
-        table.add_row(name, fid, f"[{status_style}]{status_text}[/{status_style}]")
+        console.print(table)
 
-    console.print(table)
+    account_age_days = None
+    if "timecreated" in profile:
+        account_age_days = (datetime.now(timezone.utc) - datetime.fromtimestamp(
+            profile["timecreated"], tz=timezone.utc
+        )).days
+    score, reasons = compute_trust_score(
+        profile, bans, account_age_days, games_private, inventory_private, friends_private
+    )
+    if score >= 75:
+        score_color = "green"
+    elif score >= 45:
+        score_color = "yellow"
+    else:
+        score_color = "red"
+    trust_lines = [f"[bold {score_color}]Score: {score}/100[/bold {score_color}]"]
+    trust_lines += [f"  - {reason}" for reason in reasons]
+    trust_lines.append("\n[dim]Unofficial heuristic for quick orientation only — not a Valve-provided signal.[/dim]")
+    console.print(Panel("\n".join(trust_lines), title="Trust Assessment", border_style=score_color))
 
 
 def print_common_friends(client: SteamClient, steam_id_a: str, steam_id_b: str) -> None:

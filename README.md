@@ -67,6 +67,9 @@ python main.py <identifier_a> --compare <identifier_b>
 | Bans             | VAC bans, game bans, community ban, economy ban, days since last ban                   | `ISteamUser/GetPlayerBans`                                  |
 | CS2 Inventory    | Total/unique item counts, top 5 items, estimated value in USD                          | Public inventory endpoint + Steam Market price overview     |
 | Friends          | Total friend count; each friend's name and ban status (VAC/game/community or "clean")  | `ISteamUser/GetFriendList`, `GetPlayerBans`                 |
+| Trust Assessment | A 0-100 heuristic score with reasons (bans, account age, profile/games/inventory/friends privacy) | Computed locally from the data above                |
+
+> **Trust Assessment is not an official Valve signal.** It's a simple local heuristic meant for quick orientation, not a definitive verdict — always use your own judgment.
 
 Some sections depend on the target's privacy settings and are skipped with a notice if unavailable:
 - **Games** requires "game details" to be public.
