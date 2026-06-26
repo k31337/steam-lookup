@@ -1,6 +1,6 @@
 # steam-lookup
 
-A Python CLI tool that queries the [Steam Web API](https://steamcommunity.com/dev) to display a player's profile, Steam level and badges, VAC/game/community bans, and their friend list with each friend's ban status.
+A Python CLI tool that queries the [Steam Web API](https://steamcommunity.com/dev) to display a player's profile, Steam level and badges, owned games and playtime, VAC/game/community bans, estimated CS2 inventory value, and their friend list with each friend's ban status.
 
 ## Requirements
 
@@ -51,14 +51,19 @@ python main.py gabelogannewell
 
 ## What it shows
 
-| Section          | Data                                                                                  | Source endpoint                              |
-|------------------|----------------------------------------------------------------------------------------|-----------------------------------------------|
-| Profile          | Name, SteamID64, profile URL, online status, account creation date, country            | `ISteamUser/GetPlayerSummaries`               |
-| Level & Badges   | Steam level, total badge count, top 5 badges by level                                  | `IPlayerService/GetSteamLevel`, `GetBadges`   |
-| Bans             | VAC bans, game bans, community ban, economy ban, days since last ban                   | `ISteamUser/GetPlayerBans`                    |
-| Friends          | Total friend count; each friend's name and ban status (VAC/game/community or "clean")  | `ISteamUser/GetFriendList`, `GetPlayerBans`   |
+| Section          | Data                                                                                  | Source endpoint                                          |
+|------------------|----------------------------------------------------------------------------------------|------------------------------------------------------------|
+| Profile          | Name, SteamID64, profile URL, online status, account creation date, country            | `ISteamUser/GetPlayerSummaries`                             |
+| Level & Badges   | Steam level, total badge count, top 5 badges by XP                                     | `IPlayerService/GetSteamLevel`, `GetBadges`                 |
+| Games            | Owned game count, total playtime, top 5 games by playtime                              | `IPlayerService/GetOwnedGames`                              |
+| Bans             | VAC bans, game bans, community ban, economy ban, days since last ban                   | `ISteamUser/GetPlayerBans`                                  |
+| CS2 Inventory    | Total/unique item counts, top 5 items, estimated value in USD                          | Public inventory endpoint + Steam Market price overview     |
+| Friends          | Total friend count; each friend's name and ban status (VAC/game/community or "clean")  | `ISteamUser/GetFriendList`, `GetPlayerBans`                 |
 
-The friend list and friends' ban statuses require the target profile's friend list to be public; otherwise this section is skipped with a notice.
+Some sections depend on the target's privacy settings and are skipped with a notice if unavailable:
+- **Games** requires "game details" to be public.
+- **CS2 Inventory** requires the inventory to be public.
+- **Friends** requires the friend list to be public.
 
 ## Project structure
 

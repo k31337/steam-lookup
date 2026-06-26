@@ -93,6 +93,17 @@ class SteamClient:
         )
         return data.get("response", {}).get("badges", [])
 
+    def get_owned_games(self, steam_id: str) -> list[dict]:
+        """Returns owned games with playtime. Requires the game details to be public."""
+        data = self._get(
+            "IPlayerService", "GetOwnedGames", "v1",
+            {"steamid": steam_id, "include_appinfo": 1, "include_played_free_games": 1},
+        )
+        response = data.get("response", {})
+        if not response:
+            raise SteamAPIError("Could not retrieve game list (game details are private).")
+        return response.get("games", [])
+
     def get_inventory_item_counts(self, steam_id: str, app_id: int = CS2_APP_ID) -> dict[str, int]:
         """Returns a count of items per item name from a user's public inventory.
 

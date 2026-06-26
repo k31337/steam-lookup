@@ -52,6 +52,19 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         badge_lines.append(f"  - {label}: level {badge.get('level', 0)}, {badge.get('xp', 0)} XP")
     console.print(Panel("\n".join(badge_lines), title="Level & Badges", border_style="yellow"))
 
+    try:
+        games = client.get_owned_games(steam_id)
+    except SteamAPIError as e:
+        console.print(Panel(str(e), title="Games", border_style="grey50"))
+    else:
+        total_hours = sum(g.get("playtime_forever", 0) for g in games) / 60
+        game_lines = [f"[bold]Owned games:[/bold] {len(games)}", f"[bold]Total playtime:[/bold] {total_hours:,.1f} hours"]
+        top_games = sorted(games, key=lambda g: g.get("playtime_forever", 0), reverse=True)[:5]
+        for g in top_games:
+            hours = g.get("playtime_forever", 0) / 60
+            game_lines.append(f"  - {g.get('name', 'Unknown')}: {hours:,.1f} hours")
+        console.print(Panel("\n".join(game_lines), title="Games", border_style="green"))
+
     bans = client.get_player_bans(steam_id)
     has_bans = bans.get("NumberOfVACBans", 0) > 0 or bans.get("NumberOfGameBans", 0) > 0 or bans.get("CommunityBanned")
     ban_color = "red" if has_bans else "green"
