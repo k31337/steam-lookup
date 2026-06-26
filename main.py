@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import unicodedata
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -25,6 +26,12 @@ PERSONA_STATES = {
 
 def format_timestamp(ts: int) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+
+
+def sanitize_display_name(name: str) -> str:
+    """Strips zero-width and combining-mark characters that break table column
+    alignment on terminals/fonts that render them with non-zero width anyway."""
+    return "".join(ch for ch in name if unicodedata.category(ch) not in ("Mn", "Me", "Cf")) or "Unknown"
 
 
 def compute_trust_score(
@@ -205,7 +212,7 @@ def print_profile(client: SteamClient, steam_id: str) -> dict:
                 flags.append("Community ban")
             status_text = ", ".join(flags) if flags else "clean"
             status_style = "red" if flags else "green"
-            table.add_row(name, fid, f"[{status_style}]{status_text}[/{status_style}]")
+            table.add_row(sanitize_display_name(name), fid, f"[{status_style}]{status_text}[/{status_style}]")
             friends_data.append({"steamid": fid, "name": name, "ban_status": status_text})
 
         data["friends"] = {"count": len(friends), "friends": friends_data}
@@ -265,7 +272,7 @@ def print_common_friends(client: SteamClient, steam_id_a: str, steam_id_b: str) 
     table.add_column("Name", style="bold", max_width=30, overflow="ellipsis", no_wrap=True)
     table.add_column("SteamID64", no_wrap=True)
     for fid in common_ids:
-        table.add_row(names_by_id.get(fid, "Unknown"), fid)
+        table.add_row(sanitize_display_name(names_by_id.get(fid, "Unknown")), fid)
     console.print(table)
 
 
