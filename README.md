@@ -57,6 +57,14 @@ Show the friends two profiles have in common:
 python main.py <identifier_a> --compare <identifier_b>
 ```
 
+### Exporting results
+
+Save all collected data (profile, level, badges, games, bans, inventory, friends, trust score) as JSON:
+
+```
+python main.py <identifier> --export results.json
+```
+
 ## What it shows
 
 | Section          | Data                                                                                  | Source endpoint                                          |

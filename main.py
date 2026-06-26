@@ -1,4 +1,5 @@
 """Shows information for a Steam profile: basic info, friends, and bans."""
+import json
 import os
 import sys
 from datetime import datetime, timezone
@@ -75,8 +76,11 @@ def compute_trust_score(
     return score, reasons
 
 
-def print_profile(client: SteamClient, steam_id: str) -> None:
+def print_profile(client: SteamClient, steam_id: str) -> dict:
+    data: dict = {}
+
     profile = client.get_player_summary(steam_id)
+    data["profile"] = profile
     status = PERSONA_STATES.get(profile.get("personastate"), "Unknown")
     status_color = "green" if status == "Online" else "white"
 
@@ -94,6 +98,8 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
 
     level = client.get_steam_level(steam_id)
     badges = client.get_badges(steam_id)
+    data["steam_level"] = level
+    data["badges"] = badges
     badge_lines = [f"[bold]Steam level:[/bold] {level}", f"[bold]Total badges:[/bold] {len(badges)}"]
     for badge in sorted(badges, key=lambda b: b.get("xp", 0), reverse=True)[:5]:
         appid = badge.get("appid")
@@ -106,9 +112,11 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         games = client.get_owned_games(steam_id)
     except SteamAPIError as e:
         games_private = True
+        data["games"] = None
         console.print(Panel(str(e), title="Games", border_style="grey50"))
     else:
         total_hours = sum(g.get("playtime_forever", 0) for g in games) / 60
+        data["games"] = {"count": len(games), "total_hours": round(total_hours, 1), "games": games}
         game_lines = [f"[bold]Owned games:[/bold] {len(games)}", f"[bold]Total playtime:[/bold] {total_hours:,.1f} hours"]
         top_games = sorted(games, key=lambda g: g.get("playtime_forever", 0), reverse=True)[:5]
         for g in top_games:
@@ -117,6 +125,7 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         console.print(Panel("\n".join(game_lines), title="Games", border_style="green"))
 
     bans = client.get_player_bans(steam_id)
+    data["bans"] = bans
     has_bans = bans.get("NumberOfVACBans", 0) > 0 or bans.get("NumberOfGameBans", 0) > 0 or bans.get("CommunityBanned")
     ban_color = "red" if has_bans else "green"
     ban_lines = [
@@ -134,9 +143,13 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         item_counts = client.get_inventory_item_counts(steam_id)
     except SteamAPIError as e:
         inventory_private = True
+        data["cs2_inventory"] = None
         console.print(Panel(str(e), title="CS2 Inventory", border_style="grey50"))
     else:
         total_items = sum(item_counts.values())
+        data["cs2_inventory"] = {
+            "total_items": total_items, "unique_items": len(item_counts), "item_counts": item_counts,
+        }
         inv_lines = [f"[bold]Total items:[/bold] {total_items}", f"[bold]Unique items:[/bold] {len(item_counts)}"]
         top_items = sorted(item_counts.items(), key=lambda kv: kv[1], reverse=True)[:5]
         for name, count in top_items:
@@ -145,6 +158,8 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         if item_counts:
             with console.status("Fetching market prices..."):
                 total_value, priced_count = client.get_inventory_value(item_counts)
+            data["cs2_inventory"]["estimated_value_usd"] = round(total_value, 2)
+            data["cs2_inventory"]["priced_unique_items"] = priced_count
             inv_lines.append(f"\n[bold]Estimated value:[/bold] ~${total_value:,.2f} USD")
             inv_lines.append(
                 f"[dim](based on lowest market price for the top {priced_count} most common unique items)[/dim]"
@@ -156,6 +171,7 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
     friends = client.get_friend_list(steam_id)
     if not friends:
         friends_private = True
+        data["friends"] = None
         console.print(Panel(
             "Could not retrieve friend list (private profile or no friends).",
             title="Friends", border_style="grey50",
@@ -176,6 +192,7 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
         table.add_column("SteamID64", no_wrap=True)
         table.add_column("Ban status", no_wrap=True)
 
+        friends_data = []
         for fid in friend_ids:
             name = names_by_id.get(fid, "Unknown")
             ban = bans_by_id.get(fid, {})
@@ -189,7 +206,9 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
             status_text = ", ".join(flags) if flags else "clean"
             status_style = "red" if flags else "green"
             table.add_row(name, fid, f"[{status_style}]{status_text}[/{status_style}]")
+            friends_data.append({"steamid": fid, "name": name, "ban_status": status_text})
 
+        data["friends"] = {"count": len(friends), "friends": friends_data}
         console.print(table)
 
     account_age_days = None
@@ -210,6 +229,9 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
     trust_lines += [f"  - {reason}" for reason in reasons]
     trust_lines.append("\n[dim]Unofficial heuristic for quick orientation only — not a Valve-provided signal.[/dim]")
     console.print(Panel("\n".join(trust_lines), title="Trust Assessment", border_style=score_color))
+    data["trust_assessment"] = {"score": score, "reasons": reasons}
+
+    return data
 
 
 def print_common_friends(client: SteamClient, steam_id_a: str, steam_id_b: str) -> None:
@@ -251,11 +273,15 @@ def main() -> None:
     load_dotenv()
     args = sys.argv[1:]
     if not args:
-        console.print("Usage: python main.py <steamid64 | vanity_url | profile_url> [--compare <other_identifier>]")
+        console.print(
+            "Usage: python main.py <steamid64 | vanity_url | profile_url> "
+            "[--compare <other_identifier>] [--export <output.json>]"
+        )
         sys.exit(1)
 
     api_key = os.getenv("STEAM_API_KEY")
     identifier = args[0]
+
     compare_identifier = None
     if "--compare" in args:
         idx = args.index("--compare")
@@ -264,6 +290,14 @@ def main() -> None:
             sys.exit(1)
         compare_identifier = args[idx + 1]
 
+    export_path = None
+    if "--export" in args:
+        idx = args.index("--export")
+        if idx + 1 >= len(args):
+            console.print("Usage: python main.py <identifier> --export <output.json>")
+            sys.exit(1)
+        export_path = args[idx + 1]
+
     try:
         client = SteamClient(api_key)
         steam_id = client.resolve_steam_id(identifier)
@@ -271,7 +305,11 @@ def main() -> None:
             other_steam_id = client.resolve_steam_id(compare_identifier)
             print_common_friends(client, steam_id, other_steam_id)
         else:
-            print_profile(client, steam_id)
+            data = print_profile(client, steam_id)
+            if export_path:
+                with open(export_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                console.print(f"\n[bold green]Exported results to {export_path}[/bold green]")
     except SteamAPIError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         sys.exit(1)
