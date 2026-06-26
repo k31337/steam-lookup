@@ -88,11 +88,22 @@ Some sections depend on the target's privacy settings and are skipped with a not
 
 ```
 .
-├── main.py          # CLI entry point and output formatting
-├── steam_api.py      # Steam Web API client
-├── requirements.txt  # Python dependencies
-├── .env.example      # Template for required environment variables
+├── main.py              # CLI entry point and output formatting
+├── steam_api.py          # Steam Web API client
+├── tests/                # Unit tests (mocked, no network calls)
+├── requirements.txt      # Runtime dependencies
+├── requirements-dev.txt  # Runtime + test dependencies
+├── .env.example          # Template for required environment variables
 └── README.md
+```
+
+## Running tests
+
+Tests are fully mocked and make no real network calls.
+
+```
+pip install -r requirements-dev.txt
+pytest
 ```
 
 ## Notes
