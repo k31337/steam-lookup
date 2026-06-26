@@ -49,6 +49,14 @@ Accepts any of the following identifier formats:
 python main.py gabelogannewell
 ```
 
+### Comparing two profiles
+
+Show the friends two profiles have in common:
+
+```
+python main.py <identifier_a> --compare <identifier_b>
+```
+
 ## What it shows
 
 | Section          | Data                                                                                  | Source endpoint                                          |

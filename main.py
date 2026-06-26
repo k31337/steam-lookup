@@ -139,19 +139,66 @@ def print_profile(client: SteamClient, steam_id: str) -> None:
     console.print(table)
 
 
+def print_common_friends(client: SteamClient, steam_id_a: str, steam_id_b: str) -> None:
+    profile_a = client.get_player_summary(steam_id_a)
+    profile_b = client.get_player_summary(steam_id_b)
+
+    friends_a = {f["steamid"] for f in client.get_friend_list(steam_id_a)}
+    friends_b = {f["steamid"] for f in client.get_friend_list(steam_id_b)}
+    if not friends_a or not friends_b:
+        console.print(Panel(
+            "Could not compare friend lists (one or both profiles have a private friend list).",
+            title="Common Friends", border_style="grey50",
+        ))
+        return
+
+    common_ids = sorted(friends_a & friends_b)
+    if not common_ids:
+        console.print(Panel("No friends in common.", title="Common Friends", border_style="grey50"))
+        return
+
+    names_by_id = {}
+    for batch_start in range(0, len(common_ids), 100):
+        batch = common_ids[batch_start:batch_start + 100]
+        for p in client.get_player_summaries(batch):
+            names_by_id[p["steamid"]] = p.get("personaname", "Unknown")
+
+    table = Table(
+        title=f"Common Friends: {profile_a.get('personaname')} & {profile_b.get('personaname')} ({len(common_ids)})",
+        border_style="magenta", expand=False,
+    )
+    table.add_column("Name", style="bold", max_width=30, overflow="ellipsis", no_wrap=True)
+    table.add_column("SteamID64", no_wrap=True)
+    for fid in common_ids:
+        table.add_row(names_by_id.get(fid, "Unknown"), fid)
+    console.print(table)
+
+
 def main() -> None:
     load_dotenv()
-    if len(sys.argv) < 2:
-        console.print("Usage: python main.py <steamid64 | vanity_url | profile_url>")
+    args = sys.argv[1:]
+    if not args:
+        console.print("Usage: python main.py <steamid64 | vanity_url | profile_url> [--compare <other_identifier>]")
         sys.exit(1)
 
     api_key = os.getenv("STEAM_API_KEY")
-    identifier = sys.argv[1]
+    identifier = args[0]
+    compare_identifier = None
+    if "--compare" in args:
+        idx = args.index("--compare")
+        if idx + 1 >= len(args):
+            console.print("Usage: python main.py <identifier> --compare <other_identifier>")
+            sys.exit(1)
+        compare_identifier = args[idx + 1]
 
     try:
         client = SteamClient(api_key)
         steam_id = client.resolve_steam_id(identifier)
-        print_profile(client, steam_id)
+        if compare_identifier:
+            other_steam_id = client.resolve_steam_id(compare_identifier)
+            print_common_friends(client, steam_id, other_steam_id)
+        else:
+            print_profile(client, steam_id)
     except SteamAPIError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         sys.exit(1)
