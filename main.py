@@ -207,11 +207,6 @@ def print_profile(client: SteamClient, steam_id: str) -> dict:
             for b in client.get_players_bans(batch):
                 bans_by_id[b["SteamId"]] = b
 
-        table = Table(title=f"Friends ({len(friends)})", border_style="magenta", expand=False)
-        table.add_column("Name", style="bold", max_width=30, overflow="ellipsis", no_wrap=True)
-        table.add_column("SteamID64", no_wrap=True)
-        table.add_column("Ban status", no_wrap=True)
-
         friends_data = []
         for fid in friend_ids:
             name = names_by_id.get(fid, "Unknown")
@@ -224,12 +219,28 @@ def print_profile(client: SteamClient, steam_id: str) -> dict:
             if ban.get("CommunityBanned"):
                 flags.append("Community ban")
             status_text = ", ".join(flags) if flags else "clean"
-            status_style = "red" if flags else "green"
-            table.add_row(sanitize_display_name(name), fid, f"[{status_style}]{status_text}[/{status_style}]")
             friends_data.append({"steamid": fid, "name": name, "ban_status": status_text})
 
         data["friends"] = {"count": len(friends), "friends": friends_data}
-        console.print(table)
+
+        page_size = 25
+        for page_start in range(0, len(friends_data), page_size):
+            page = friends_data[page_start:page_start + page_size]
+            page_end = page_start + len(page)
+            table = Table(
+                title=f"Friends {page_start + 1}-{page_end} of {len(friends_data)}",
+                border_style="magenta", expand=False,
+            )
+            table.add_column("Name", style="bold", max_width=30, overflow="ellipsis", no_wrap=True)
+            table.add_column("SteamID64", no_wrap=True)
+            table.add_column("Ban status", no_wrap=True)
+            for entry in page:
+                status_style = "green" if entry["ban_status"] == "clean" else "red"
+                table.add_row(
+                    sanitize_display_name(entry["name"]), entry["steamid"],
+                    f"[{status_style}]{entry['ban_status']}[/{status_style}]",
+                )
+            console.print(table)
 
     account_age_days = None
     if "timecreated" in profile:
