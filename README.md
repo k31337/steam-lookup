@@ -90,7 +90,7 @@ python main.py <identifier> --achievements 730
 | Games            | Owned game count, total playtime, top 5 games by playtime                              | `IPlayerService/GetOwnedGames`                              |
 | Bans             | VAC bans, game bans, community ban, economy ban, days since last ban                   | `ISteamUser/GetPlayerBans`                                  |
 | CS2 Inventory    | Total/unique item counts, top 5 items, estimated value in USD                          | Public inventory endpoint + Steam Market price overview     |
-| Friends          | Total friend count; each friend's name and ban status (VAC/game/community or "clean")  | `ISteamUser/GetFriendList`, `GetPlayerBans`                 |
+| Friends          | Total friend count; each friend's name and ban status (VAC/game/community or "clean"), shown in paginated tables of 25 | `ISteamUser/GetFriendList`, `GetPlayerBans`  |
 | Trust Assessment | A 0-100 heuristic score with reasons (bans, account age, profile/games/inventory/friends privacy) | Computed locally from the data above                |
 | Achievements (`--achievements`) | Unlock progress for a specific game: unlocked/total, unlock dates, locked achievements | `ISteamUserStats/GetPlayerAchievements`, `GetSchemaForGame` |
 
@@ -105,12 +105,13 @@ Some sections depend on the target's privacy settings and are skipped with a not
 
 ```
 .
-├── main.py              # CLI entry point and output formatting
-├── steam_api.py          # Steam Web API client
-├── tests/                # Unit tests (mocked, no network calls)
-├── requirements.txt      # Runtime dependencies
-├── requirements-dev.txt  # Runtime + test dependencies
-├── .env.example          # Template for required environment variables
+├── main.py                       # CLI entry point and output formatting
+├── steam_api.py                   # Steam Web API client
+├── tests/                         # Unit tests (mocked, no network calls)
+├── .github/workflows/tests.yml    # CI: runs the test suite on push/PR
+├── requirements.txt               # Runtime dependencies
+├── requirements-dev.txt           # Runtime + test dependencies
+├── .env.example                   # Template for required environment variables
 └── README.md
 ```
 
