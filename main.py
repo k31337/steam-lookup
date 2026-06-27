@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import BarColumn, Progress, TextColumn
 from rich.table import Table
 
 from steam_api import SteamClient, SteamAPIError
@@ -163,8 +164,20 @@ def print_profile(client: SteamClient, steam_id: str) -> dict:
             inv_lines.append(f"  - {name} x{count}")
 
         if item_counts:
-            with console.status("Fetching market prices..."):
-                total_value, priced_count = client.get_inventory_value(item_counts)
+            with Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("{task.completed}/{task.total}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Fetching market prices...", total=None)
+
+                def on_item_priced(index: int, total: int, name: str) -> None:
+                    progress.update(task, completed=index, total=total)
+
+                total_value, priced_count = client.get_inventory_value(
+                    item_counts, on_item_priced=on_item_priced
+                )
             data["cs2_inventory"]["estimated_value_usd"] = round(total_value, 2)
             data["cs2_inventory"]["priced_unique_items"] = priced_count
             inv_lines.append(f"\n[bold]Estimated value:[/bold] ~${total_value:,.2f} USD")

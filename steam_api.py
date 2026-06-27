@@ -204,12 +204,15 @@ class SteamClient:
 
     def get_inventory_value(
         self, item_counts: dict[str, int], app_id: int = CS2_APP_ID, max_unique_items: int = 30,
-        request_delay: float = 1.0,
+        request_delay: float = 1.0, on_item_priced=None,
     ) -> tuple[float, int]:
         """Estimates total inventory value in USD by pricing the most common items.
 
         Returns (total_value, priced_unique_item_count). To respect Steam's rate
         limits, only the top `max_unique_items` (by quantity) are priced.
+
+        If provided, `on_item_priced(index, total, name)` is called after each
+        item lookup (e.g. to drive a progress bar).
         """
         top_items = sorted(item_counts.items(), key=lambda kv: kv[1], reverse=True)[:max_unique_items]
         total_value = 0.0
@@ -219,6 +222,8 @@ class SteamClient:
             if price is not None:
                 total_value += price * count
                 priced_count += 1
+            if on_item_priced:
+                on_item_priced(i + 1, len(top_items), name)
             if i < len(top_items) - 1:
                 time.sleep(request_delay)
         return total_value, priced_count
