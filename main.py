@@ -276,13 +276,49 @@ def print_common_friends(client: SteamClient, steam_id_a: str, steam_id_b: str) 
     console.print(table)
 
 
+def print_achievements(client: SteamClient, steam_id: str, app_id: int) -> None:
+    achievements = client.get_player_achievements(steam_id, app_id)
+    if not achievements:
+        console.print(Panel(
+            f"No achievements found for AppID {app_id}.",
+            title="Achievements", border_style="grey50",
+        ))
+        return
+
+    schema = client.get_game_schema_achievements(app_id)
+    unlocked = [a for a in achievements if a.get("achieved")]
+    locked = [a for a in achievements if not a.get("achieved")]
+    pct = len(unlocked) / len(achievements) * 100
+
+    table = Table(
+        title=f"Achievements for AppID {app_id}: {len(unlocked)}/{len(achievements)} ({pct:.1f}%)",
+        border_style="cyan", expand=False,
+    )
+    table.add_column("Achievement", style="bold", max_width=45, overflow="ellipsis", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Unlocked", no_wrap=True)
+
+    ordered = sorted(unlocked, key=lambda a: a.get("unlocktime", 0), reverse=True) + locked
+    for a in ordered:
+        apiname = a.get("apiname", "?")
+        display_name = sanitize_display_name(schema.get(apiname, {}).get("displayName", apiname))
+        if a.get("achieved"):
+            status, status_style = "Unlocked", "green"
+            unlock_date = format_timestamp(a["unlocktime"]) if a.get("unlocktime") else "-"
+        else:
+            status, status_style, unlock_date = "Locked", "grey50", "-"
+        table.add_row(display_name, f"[{status_style}]{status}[/{status_style}]", unlock_date)
+
+    console.print(table)
+
+
 def main() -> None:
     load_dotenv()
     args = sys.argv[1:]
     if not args:
         console.print(
             "Usage: python main.py <steamid64 | vanity_url | profile_url> "
-            "[--compare <other_identifier>] [--export <output.json>]"
+            "[--compare <other_identifier>] [--export <output.json>] [--achievements <appid>]"
         )
         sys.exit(1)
 
@@ -305,12 +341,22 @@ def main() -> None:
             sys.exit(1)
         export_path = args[idx + 1]
 
+    achievements_appid = None
+    if "--achievements" in args:
+        idx = args.index("--achievements")
+        if idx + 1 >= len(args):
+            console.print("Usage: python main.py <identifier> --achievements <appid>")
+            sys.exit(1)
+        achievements_appid = int(args[idx + 1])
+
     try:
         client = SteamClient(api_key)
         steam_id = client.resolve_steam_id(identifier)
         if compare_identifier:
             other_steam_id = client.resolve_steam_id(compare_identifier)
             print_common_friends(client, steam_id, other_steam_id)
+        elif achievements_appid:
+            print_achievements(client, steam_id, achievements_appid)
         else:
             data = print_profile(client, steam_id)
             if export_path:

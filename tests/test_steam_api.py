@@ -153,6 +153,40 @@ def test_get_market_price_returns_none_on_failure(client):
         assert client.get_market_price("Some Item") is None
 
 
+def test_get_player_achievements_private_raises_403(client):
+    fake = FakeResponse(403)
+    with patch("steam_api.requests.get", return_value=fake):
+        with pytest.raises(SteamAPIError, match="private"):
+            client.get_player_achievements("123", 730)
+
+
+def test_get_player_achievements_success(client):
+    fake = FakeResponse(200, {"playerstats": {"success": True, "achievements": [
+        {"apiname": "ACH_1", "achieved": 1, "unlocktime": 1700000000},
+        {"apiname": "ACH_2", "achieved": 0, "unlocktime": 0},
+    ]}})
+    with patch("steam_api.requests.get", return_value=fake):
+        achievements = client.get_player_achievements("123", 730)
+    assert len(achievements) == 2
+    assert achievements[0]["achieved"] == 1
+
+
+def test_get_player_achievements_failure_raises(client):
+    fake = FakeResponse(200, {"playerstats": {"success": False, "error": "Requested app has no stats"}})
+    with patch("steam_api.requests.get", return_value=fake):
+        with pytest.raises(SteamAPIError, match="no stats"):
+            client.get_player_achievements("123", 730)
+
+
+def test_get_game_schema_achievements(client):
+    fake = FakeResponse(200, {"game": {"availableGameStats": {"achievements": [
+        {"name": "ACH_1", "displayName": "First Blood", "description": "Win a match"},
+    ]}}})
+    with patch("steam_api.requests.get", return_value=fake):
+        schema = client.get_game_schema_achievements(730)
+    assert schema["ACH_1"]["displayName"] == "First Blood"
+
+
 def test_get_inventory_value_sums_priced_items(client):
     # Sorted by count descending, so "Item B" (3) is priced before "Item A" (2).
     item_counts = {"Item A": 2, "Item B": 3}

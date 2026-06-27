@@ -179,6 +179,29 @@ class SteamClient:
             return None
         return float(match.group().replace(",", ""))
 
+    def get_player_achievements(self, steam_id: str, app_id: int) -> list[dict]:
+        """Returns achievement progress for a game. Requires the game's stats to be public."""
+        url = f"{BASE_URL}/ISteamUserStats/GetPlayerAchievements/v1/"
+        params = {"key": self.api_key, "format": "json", "steamid": steam_id, "appid": app_id, "l": "english"}
+        resp = requests.get(url, params=params, timeout=10)
+        if resp.status_code == 403:
+            raise SteamAPIError("Could not retrieve achievements (profile/game stats are private).")
+        if resp.status_code != 200:
+            raise SteamAPIError(f"HTTP error {resp.status_code} calling GetPlayerAchievements")
+
+        playerstats = resp.json().get("playerstats", {})
+        if not playerstats.get("success"):
+            raise SteamAPIError(
+                playerstats.get("error") or "Could not retrieve achievements (stats are private or game has none)."
+            )
+        return playerstats.get("achievements", [])
+
+    def get_game_schema_achievements(self, app_id: int) -> dict[str, dict]:
+        """Returns a mapping of achievement apiname -> {displayName, description}."""
+        data = self._get("ISteamUserStats", "GetSchemaForGame", "v2", {"appid": app_id, "l": "english"})
+        achievements = data.get("game", {}).get("availableGameStats", {}).get("achievements", [])
+        return {a["name"]: a for a in achievements}
+
     def get_inventory_value(
         self, item_counts: dict[str, int], app_id: int = CS2_APP_ID, max_unique_items: int = 30,
         request_delay: float = 1.0,

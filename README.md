@@ -65,6 +65,20 @@ Save all collected data (profile, level, badges, games, bans, inventory, friends
 python main.py <identifier> --export results.json
 ```
 
+### Game achievements
+
+Show achievement progress for a specific game (requires the profile's game stats to be public):
+
+```
+python main.py <identifier> --achievements <appid>
+```
+
+Example (CS2):
+
+```
+python main.py <identifier> --achievements 730
+```
+
 ## What it shows
 
 | Section          | Data                                                                                  | Source endpoint                                          |
@@ -76,6 +90,7 @@ python main.py <identifier> --export results.json
 | CS2 Inventory    | Total/unique item counts, top 5 items, estimated value in USD                          | Public inventory endpoint + Steam Market price overview     |
 | Friends          | Total friend count; each friend's name and ban status (VAC/game/community or "clean")  | `ISteamUser/GetFriendList`, `GetPlayerBans`                 |
 | Trust Assessment | A 0-100 heuristic score with reasons (bans, account age, profile/games/inventory/friends privacy) | Computed locally from the data above                |
+| Achievements (`--achievements`) | Unlock progress for a specific game: unlocked/total, unlock dates, locked achievements | `ISteamUserStats/GetPlayerAchievements`, `GetSchemaForGame` |
 
 > **Trust Assessment is not an official Valve signal.** It's a simple local heuristic meant for quick orientation, not a definitive verdict — always use your own judgment.
 
