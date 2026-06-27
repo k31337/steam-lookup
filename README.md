@@ -1,5 +1,7 @@
 # steam-lookup
 
+[![Tests](https://github.com/k31337/steam-lookup/actions/workflows/tests.yml/badge.svg)](https://github.com/k31337/steam-lookup/actions/workflows/tests.yml)
+
 A Python CLI tool that queries the [Steam Web API](https://steamcommunity.com/dev) to display a player's profile, Steam level and badges, owned games and playtime, VAC/game/community bans, estimated CS2 inventory value, and their friend list with each friend's ban status.
 
 ## Requirements
