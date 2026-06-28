@@ -9,10 +9,30 @@ INVENTORY_URL = "https://steamcommunity.com/inventory"
 MARKET_PRICE_URL = "https://steamcommunity.com/market/priceoverview/"
 CS2_APP_ID = 730
 USD_CURRENCY = 1
+MAX_RETRIES = 4
+BACKOFF_BASE_SECONDS = 2
 
 
 class SteamAPIError(Exception):
     pass
+
+
+def _request_with_retry(*args, max_retries: int = MAX_RETRIES, **kwargs) -> requests.Response:
+    """Wraps requests.get with exponential backoff retries on HTTP 429.
+
+    Honors the Retry-After header when Steam provides one; otherwise backs off
+    as BACKOFF_BASE_SECONDS * 2**attempt. Returns the final response (including
+    a 429) if retries are exhausted, leaving status-code handling to the caller.
+    """
+    resp = requests.get(*args, **kwargs)
+    attempt = 0
+    while resp.status_code == 429 and attempt < max_retries:
+        retry_after = resp.headers.get("Retry-After")
+        delay = float(retry_after) if retry_after else BACKOFF_BASE_SECONDS * (2 ** attempt)
+        time.sleep(delay)
+        resp = requests.get(*args, **kwargs)
+        attempt += 1
+    return resp
 
 
 class SteamClient:
@@ -24,7 +44,9 @@ class SteamClient:
     def _get(self, interface: str, method: str, version: str, params: dict) -> dict:
         url = f"{BASE_URL}/{interface}/{method}/{version}/"
         params = {"key": self.api_key, "format": "json", **params}
-        resp = requests.get(url, params=params, timeout=10)
+        resp = _request_with_retry(url, params=params, timeout=10)
+        if resp.status_code == 429:
+            raise SteamAPIError(f"Rate limited by Steam calling {method}. Try again shortly.")
         if resp.status_code != 200:
             raise SteamAPIError(f"HTTP error {resp.status_code} calling {method}")
         return resp.json()
@@ -124,7 +146,7 @@ class SteamClient:
             if start_assetid:
                 params["start_assetid"] = start_assetid
 
-            resp = requests.get(url, params=params, headers=headers, timeout=10)
+            resp = _request_with_retry(url, params=params, headers=headers, timeout=10)
             if resp.status_code == 403:
                 raise SteamAPIError("Inventory is private.")
             if resp.status_code == 400:
@@ -160,7 +182,7 @@ class SteamClient:
         aggressively rate-limited by Steam, so callers should space out requests.
         """
         headers = {"User-Agent": "Mozilla/5.0 (compatible; steam-lookup/1.0)"}
-        resp = requests.get(
+        resp = _request_with_retry(
             MARKET_PRICE_URL,
             params={"appid": app_id, "currency": USD_CURRENCY, "market_hash_name": market_hash_name},
             headers=headers,
@@ -183,9 +205,11 @@ class SteamClient:
         """Returns achievement progress for a game. Requires the game's stats to be public."""
         url = f"{BASE_URL}/ISteamUserStats/GetPlayerAchievements/v1/"
         params = {"key": self.api_key, "format": "json", "steamid": steam_id, "appid": app_id, "l": "english"}
-        resp = requests.get(url, params=params, timeout=10)
+        resp = _request_with_retry(url, params=params, timeout=10)
         if resp.status_code == 403:
             raise SteamAPIError("Could not retrieve achievements (profile/game stats are private).")
+        if resp.status_code == 429:
+            raise SteamAPIError("Rate limited by Steam calling GetPlayerAchievements. Try again shortly.")
         if resp.status_code != 200:
             raise SteamAPIError(f"HTTP error {resp.status_code} calling GetPlayerAchievements")
 

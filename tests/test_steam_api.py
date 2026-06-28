@@ -6,9 +6,10 @@ from steam_api import SteamAPIError, SteamClient
 
 
 class FakeResponse:
-    def __init__(self, status_code=200, json_data=None):
+    def __init__(self, status_code=200, json_data=None, headers=None):
         self.status_code = status_code
         self._json_data = json_data or {}
+        self.headers = headers or {}
 
     def json(self):
         return self._json_data
@@ -17,6 +18,30 @@ class FakeResponse:
 @pytest.fixture
 def client():
     return SteamClient(api_key="fake-key")
+
+
+def test_get_retries_on_429_then_succeeds(client):
+    rate_limited = FakeResponse(429)
+    ok = FakeResponse(200, {"response": {"players": [{"steamid": "123", "personaname": "Foo"}]}})
+    with patch("steam_api.requests.get", side_effect=[rate_limited, ok]), patch("steam_api.time.sleep") as mock_sleep:
+        profile = client.get_player_summary("123")
+    assert profile["personaname"] == "Foo"
+    mock_sleep.assert_called_once()
+
+
+def test_get_honors_retry_after_header(client):
+    rate_limited = FakeResponse(429, headers={"Retry-After": "5"})
+    ok = FakeResponse(200, {"response": {"players": [{"steamid": "123"}]}})
+    with patch("steam_api.requests.get", side_effect=[rate_limited, ok]), patch("steam_api.time.sleep") as mock_sleep:
+        client.get_player_summary("123")
+    mock_sleep.assert_called_once_with(5.0)
+
+
+def test_get_raises_after_exhausting_retries(client):
+    always_limited = [FakeResponse(429)] * 10
+    with patch("steam_api.requests.get", side_effect=always_limited), patch("steam_api.time.sleep"):
+        with pytest.raises(SteamAPIError, match="Rate limited"):
+            client.get_player_summary("123")
 
 
 def test_missing_api_key_raises():

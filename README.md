@@ -128,6 +128,7 @@ pytest
 
 - This project uses the official Steam Web API and is not affiliated with or endorsed by Valve.
 - API keys are personal and tied to your Steam account — do not share or commit them.
+- If Steam responds with HTTP 429 (rate limited), requests are automatically retried with exponential backoff (honoring the `Retry-After` header when present) before giving up.
 
 ## License
 
