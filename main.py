@@ -346,7 +346,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    api_key = os.getenv("STEAM_API_KEY")
+    api_key = os.getenv("STEAM_API_KEY", "")
     identifier = args[0]
 
     compare_identifier = None
@@ -371,7 +371,11 @@ def main() -> None:
         if idx + 1 >= len(args):
             console.print("Usage: python main.py <identifier> --achievements <appid>")
             sys.exit(1)
-        achievements_appid = int(args[idx + 1])
+        try:
+            achievements_appid = int(args[idx + 1])
+        except ValueError:
+            console.print(f"[bold red]Error:[/bold red] --achievements requires a numeric AppID, got '{args[idx + 1]}'")
+            sys.exit(1)
 
     try:
         client = SteamClient(api_key)
@@ -379,6 +383,8 @@ def main() -> None:
         if compare_identifier:
             other_steam_id = client.resolve_steam_id(compare_identifier)
             print_common_friends(client, steam_id, other_steam_id)
+            if export_path:
+                console.print("[yellow]Note:[/yellow] --export is not supported with --compare.")
         elif achievements_appid:
             print_achievements(client, steam_id, achievements_appid)
         else:
